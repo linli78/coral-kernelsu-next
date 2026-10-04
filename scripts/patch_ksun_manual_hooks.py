@@ -16,15 +16,13 @@ def replace_once(path, old, new, label):
 p="fs/exec.c"
 s=open(p).read()
 if "ksu_handle_execveat" not in s:
-    anchor="""static int do_execveat_common(int fd, struct filename *filename,
+    marker="""static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr argv,
 			      struct user_arg_ptr envp,
 			      int flags)
 {
-	return __do_execve_file(fd, filename, argv, envp, flags, NULL);
-}
 """
-    new="""#ifdef CONFIG_KSU_MANUAL_HOOK
+    repl="""#ifdef CONFIG_KSU_MANUAL_HOOK
 __attribute__((hot))
 extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
 				void *argv, void *envp, int *flags);
@@ -38,11 +36,9 @@ static int do_execveat_common(int fd, struct filename *filename,
 #ifdef CONFIG_KSU_MANUAL_HOOK
 	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
 #endif
-	return __do_execve_file(fd, filename, argv, envp, flags, NULL);
-}
 """
-    if anchor not in s: raise SystemExit("exec hook anchor not found")
-    open(p,"w").write(s.replace(anchor,new,1))
+    if marker not in s: raise SystemExit("exec hook function anchor not found")
+    open(p,"w").write(s.replace(marker,repl,1))
 
 # fs/open.c
 p="fs/open.c"; s=open(p).read()
