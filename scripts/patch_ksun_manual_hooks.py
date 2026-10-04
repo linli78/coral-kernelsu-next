@@ -101,3 +101,37 @@ for path,sym in [("fs/stat.c","ksu_handle_stat"),("fs/exec.c","ksu_handle_execve
     if sym not in open(path).read():
         raise SystemExit(f"{sym} missing in {path}")
 print("manual hooks applied")
+
+
+# KernelSU Next v3.4.0-legacy checks hook mode even during mrproper, before
+# floral_defconfig is loaded. Teach its Kbuild to accept our verified coral
+# manual hook marker directly.
+p="drivers/kernelsu/Kbuild"
+s=open(p).read()
+needle='''ifeq ($(CONFIG_KSU_MANUAL_HOOK), y)
+HAVE_KSU_HOOK := $(shell grep -q "ksu_handle_sys_reboot" $(srctree)/kernel/reboot.c && echo 0 || echo 1)
+ifeq ($(HAVE_KSU_HOOK),0)
+$(info -- KernelSU-Next: Hook mode: Manual)
+endif
+endif
+'''
+repl='''ifeq ($(CONFIG_KSU_MANUAL_HOOK), y)
+HAVE_KSU_HOOK := $(shell grep -q "ksu_handle_sys_reboot" $(srctree)/kernel/reboot.c && echo 0 || echo 1)
+ifeq ($(HAVE_KSU_HOOK),0)
+$(info -- KernelSU-Next: Hook mode: Manual)
+endif
+endif
+
+# Coral 4.14 build invokes mrproper before .config exists. If the manual
+# reboot hook is already present, accept manual-hook mode for the clean pass.
+ifeq ($(HAVE_KSU_HOOK),1)
+HAVE_KSU_HOOK := $(shell grep -q "ksu_handle_sys_reboot" $(srctree)/kernel/reboot.c && echo 0 || echo 1)
+ifeq ($(HAVE_KSU_HOOK),0)
+$(info -- KernelSU-Next: Hook mode: Manual (coral source marker))
+endif
+endif
+'''
+if needle not in s:
+    raise SystemExit("KernelSU Kbuild manual-hook block not found")
+open(p,"w").write(s.replace(needle,repl,1))
+print("KernelSU Kbuild clean-pass hook check patched")
