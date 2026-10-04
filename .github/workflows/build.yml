@@ -46,6 +46,13 @@ jobs:
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/${KSU_REF}/kernel/setup.sh" \
             | bash -s "${KSU_REF}"
 
+      - name: Apply coral manual hooks
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE/kernel/private/msm-google"
+          python3 "$GITHUB_WORKSPACE/scripts/patch_ksun_manual_hooks.py"
+
       - name: Enable KernelSU
         shell: bash
         run: |
@@ -59,9 +66,15 @@ jobs:
             exit 1
           fi
 
-          if ! grep -q '^CONFIG_KSU=y' "$DEFCONFIG"; then
-            printf '\nCONFIG_KSU=y\n' >> "$DEFCONFIG"
-          fi
+          for opt in CONFIG_KSU CONFIG_KSU_MANUAL_HOOK; do
+            if grep -q "^# $opt is not set$" "$DEFCONFIG"; then
+              sed -i "s/^# $opt is not set$/$opt=y/" "$DEFCONFIG"
+            elif grep -q "^$opt=" "$DEFCONFIG"; then
+              sed -i "s/^$opt=.*/$opt=y/" "$DEFCONFIG"
+            else
+              printf '\n%s=y\n' "$opt" >> "$DEFCONFIG"
+            fi
+          done
 
       - name: Build kernel
         shell: bash
