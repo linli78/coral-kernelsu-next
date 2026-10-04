@@ -191,3 +191,16 @@ if needle not in s:
     raise SystemExit("KernelSU Kbuild manual-hook block not found")
 open(p,"w").write(s.replace(needle,repl,1))
 print("KernelSU Kbuild clean-pass hook check patched")
+
+
+# KernelSU Next allowlist compatibility for coral 4.14:
+# put_task_struct() is declared in linux/sched/task.h on this tree.
+p="drivers/kernelsu/policy/allowlist.c"
+s=open(p).read()
+if "#include <linux/sched/task.h>" not in s:
+    anchor="#include <linux/kref.h>\n"
+    if anchor not in s:
+        raise SystemExit("allowlist include anchor not found")
+    s=s.replace(anchor, anchor+"#include <linux/sched/task.h>\n", 1)
+    open(p,"w").write(s)
+    print("KernelSU allowlist task header patched")
