@@ -55,9 +55,20 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 """
     if marker not in s: raise SystemExit("faccessat hook anchor not found")
     s=s.replace(marker,repl,1)
-    marker2="	unsigned int lookup_flags = LOOKUP_FOLLOW;\n"
-    if marker2 not in s: raise SystemExit("faccessat lookup anchor not found")
-    s=s.replace(marker2, marker2+"#ifdef CONFIG_KSU_MANUAL_HOOK\n\tksu_handle_faccessat(&dfd, &filename, &mode, NULL);\n#endif\n",1)
+
+    decls="""	unsigned int lookup_flags = LOOKUP_FOLLOW;
+"""
+    hook="""	unsigned int lookup_flags = LOOKUP_FOLLOW;
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
+#endif
+"""
+    # Limit replacement to the faccessat function so we don't hit an earlier
+    # LOOKUP_FOLLOW declaration elsewhere in fs/open.c.
+    fn=s.index("SYSCALL_DEFINE3(faccessat")
+    pos=s.find(decls, fn)
+    if pos < 0: raise SystemExit("faccessat lookup anchor not found")
+    s=s[:pos]+hook+s[pos+len(decls):]
     open(p,"w").write(s)
 
 # kernel/reboot.c
@@ -71,12 +82,25 @@ extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void 
 SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 		void __user *, arg)
 {
+"""
+    if marker not in s: raise SystemExit("reboot hook anchor not found")
+    s=s.replace(marker,repl,1)
+
+    decls="""	struct pid_namespace *pid_ns = task_active_pid_ns(current);
+	char buffer[256];
+	int ret = 0;
+"""
+    hook="""	struct pid_namespace *pid_ns = task_active_pid_ns(current);
+	char buffer[256];
+	int ret = 0;
+
 #ifdef CONFIG_KSU_MANUAL_HOOK
 	ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
 #endif
 """
-    if marker not in s: raise SystemExit("reboot hook anchor not found")
-    open(p,"w").write(s.replace(marker,repl,1))
+    if decls not in s: raise SystemExit("reboot declaration anchor not found")
+    s=s.replace(decls,hook,1)
+    open(p,"w").write(s)
 
 # fs/stat.c minimal stat hook
 p="fs/stat.c"; s=open(p).read()
