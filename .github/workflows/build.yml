@@ -79,6 +79,14 @@ jobs:
             fi
           done
 
+          # Normalize defconfig exactly as Kconfig expects so Google's
+          # POST_DEFCONFIG_CMDS=check_defconfig validation passes.
+          make O="$GITHUB_WORKSPACE/kernel/out/defconfig-normalize" \
+            ARCH=arm64 CC=clang HOSTCC=clang LD=ld.lld floral_defconfig
+          make O="$GITHUB_WORKSPACE/kernel/out/defconfig-normalize" \
+            ARCH=arm64 CC=clang HOSTCC=clang LD=ld.lld savedefconfig
+          cp "$GITHUB_WORKSPACE/kernel/out/defconfig-normalize/defconfig" "$DEFCONFIG"
+
       - name: Build kernel
         shell: bash
         run: |
