@@ -114,12 +114,25 @@ extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *fla
 SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 		struct stat __user *, statbuf, int, flag)
 {
+"""
+    if marker not in s: raise SystemExit("stat hook anchor not found")
+    s=s.replace(marker,repl,1)
+
+    decls="""	struct kstat stat;
+	int error;
+"""
+    hook="""	struct kstat stat;
+	int error;
+
 #ifdef CONFIG_KSU_MANUAL_HOOK
 	ksu_handle_stat(&dfd, &filename, &flag);
 #endif
 """
-    if marker not in s: raise SystemExit("stat hook anchor not found")
-    open(p,"w").write(s.replace(marker,repl,1))
+    fn=s.index("SYSCALL_DEFINE4(newfstatat")
+    pos=s.find(decls, fn)
+    if pos < 0: raise SystemExit("stat declaration anchor not found")
+    s=s[:pos]+hook+s[pos+len(decls):]
+    open(p,"w").write(s)
 
 for path,sym in [("fs/stat.c","ksu_handle_stat"),("fs/exec.c","ksu_handle_execveat"),("fs/open.c","ksu_handle_faccessat"),("kernel/reboot.c","ksu_handle_sys_reboot")]:
     if sym not in open(path).read():
