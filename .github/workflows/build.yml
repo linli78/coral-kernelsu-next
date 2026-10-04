@@ -93,7 +93,7 @@ jobs:
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE/kernel"
           export BUILD_CONFIG=private/msm-google/build.config.floral
-          build/build.sh -j"$(nproc)"
+          build/build.sh -j2
 
       - name: Collect outputs
         if: always()
