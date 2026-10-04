@@ -204,3 +204,16 @@ if "#include <linux/sched/task.h>" not in s:
     s=s.replace(anchor, anchor+"#include <linux/sched/task.h>\n", 1)
     open(p,"w").write(s)
     print("KernelSU allowlist task header patched")
+
+
+# KernelSU Next supercall compatibility for coral 4.14:
+# tasklist_lock and init_task live in linux/sched/task.h on this tree.
+p="drivers/kernelsu/supercall/dispatch.c"
+s=open(p).read()
+if "#include <linux/sched/task.h>" not in s:
+    anchor="#include <linux/thread_info.h>\n"
+    if anchor not in s:
+        raise SystemExit("dispatch include anchor not found")
+    s=s.replace(anchor, anchor+"#include <linux/sched/task.h>\n", 1)
+    open(p,"w").write(s)
+    print("KernelSU supercall task header patched")
