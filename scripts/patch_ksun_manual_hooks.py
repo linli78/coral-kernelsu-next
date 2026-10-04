@@ -33,12 +33,31 @@ static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr envp,
 			      int flags)
 {
+"""
+    if marker not in s: raise SystemExit("exec hook function anchor not found")
+    s=s.replace(marker,repl,1)
+
+    decls="""	char *pathbuf = NULL;
+	struct linux_binprm *bprm;
+	struct file *file;
+	struct files_struct *displaced;
+	int retval;
+"""
+    hook="""	char *pathbuf = NULL;
+	struct linux_binprm *bprm;
+	struct file *file;
+	struct files_struct *displaced;
+	int retval;
+
 #ifdef CONFIG_KSU_MANUAL_HOOK
 	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
 #endif
 """
-    if marker not in s: raise SystemExit("exec hook function anchor not found")
-    open(p,"w").write(s.replace(marker,repl,1))
+    fn=s.index("static int do_execveat_common")
+    pos=s.find(decls, fn)
+    if pos < 0: raise SystemExit("exec declaration anchor not found")
+    s=s[:pos]+hook+s[pos+len(decls):]
+    open(p,"w").write(s)
 
 # fs/open.c
 p="fs/open.c"; s=open(p).read()
