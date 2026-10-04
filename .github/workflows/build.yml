@@ -9,6 +9,9 @@ jobs:
     timeout-minutes: 120
 
     steps:
+      - name: Checkout build scripts
+        uses: actions/checkout@v4
+
       - name: Install host dependencies
         run: |
           sudo apt-get update
