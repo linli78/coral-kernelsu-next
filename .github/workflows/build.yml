@@ -1,0 +1,100 @@
+name: Build coral KernelSU Next
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex git libelf-dev \
+            libssl-dev python3 repo rsync unzip zip
+
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Init Google Pixel 4 XL Android 13 kernel tree
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/kernel"
+          cd "$GITHUB_WORKSPACE/kernel"
+          repo init -u https://android.googlesource.com/kernel/manifest \
+            -b android-msm-coral-4.14-android13
+          repo sync -c -j"$(nproc)" --no-tags --no-clone-bundle
+
+      - name: Show source revision
+        run: |
+          cd "$GITHUB_WORKSPACE/kernel"
+          repo manifest -r > pinned-manifest.xml
+          git -C private/msm-google log -1 --oneline || true
+
+      - name: Integrate KernelSU Next legacy
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE/kernel/private/msm-google"
+
+          KSU_REF="v3.4.0-legacy"
+
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/${KSU_REF}/kernel/setup.sh" \
+            | bash -s "${KSU_REF}"
+
+      - name: Enable KernelSU
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE/kernel/private/msm-google"
+
+          DEFCONFIG="arch/arm64/configs/floral_defconfig"
+          if [ ! -f "$DEFCONFIG" ]; then
+            echo "Could not find $DEFCONFIG"
+            find arch/arm64/configs -maxdepth 1 -type f | grep -E 'floral|coral' || true
+            exit 1
+          fi
+
+          if ! grep -q '^CONFIG_KSU=y' "$DEFCONFIG"; then
+            printf '\nCONFIG_KSU=y\n' >> "$DEFCONFIG"
+          fi
+
+      - name: Build kernel
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE/kernel"
+          export BUILD_CONFIG=private/msm-google/build.config.floral
+          build/build.sh -j"$(nproc)"
+
+      - name: Collect outputs
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          cd "$GITHUB_WORKSPACE/kernel"
+
+          cp pinned-manifest.xml "$GITHUB_WORKSPACE/artifacts/" || true
+
+          find out -type f \( \
+            -name 'Image' -o \
+            -name 'Image.lz4' -o \
+            -name 'Image.gz' -o \
+            -name 'boot.img' -o \
+            -name 'dtbo.img' -o \
+            -name 'vendor_boot.img' \
+          \) -print -exec cp -n {} "$GITHUB_WORKSPACE/artifacts/" \; || true
+
+          find "$GITHUB_WORKSPACE/artifacts" -maxdepth 1 -type f -ls || true
+
+      - name: Upload kernel artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coral-kernelsu-next
+          path: artifacts/
+          if-no-files-found: warn
